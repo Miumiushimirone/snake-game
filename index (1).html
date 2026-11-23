@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<!-- viewport: bikin halaman pas di layar HP -->
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Snake</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #eee;
+    font-family: sans-serif;
+    text-align: center;
+    touch-action: none;      /* cegah layar ikut ke-scroll saat digesek */
+    user-select: none;
+  }
+  h1 { font-size: 20px; margin: 10px 0 4px; }
+  #skor { margin-bottom: 8px; }
+  canvas { background: #1d1d1d; border: 2px solid #444; border-radius: 6px; }
+  #pad { display: grid; grid-template-columns: repeat(3, 70px); gap: 8px; justify-content: center; margin-top: 14px; }
+  #pad button {
+    height: 60px; font-size: 24px; border: none; border-radius: 12px;
+    background: #333; color: #fff;
+  }
+  #pad button:active { background: #4caf50; }
+</style>
+</head>
+<body>
+
+<h1>Snake</h1>
+<div id="skor">Skor: 0 | Terbaik: 0</div>
+<canvas id="game"></canvas>
+
+<!-- Tombol virtual (alternatif selain gesek layar) -->
+<div id="pad">
+  <span></span><button data-x="0" data-y="-1">▲</button><span></span>
+  <button data-x="-1" data-y="0">◀</button>
+  <button data-x="0" data-y="1">▼</button>
+  <button data-x="1" data-y="0">▶</button>
+</div>
+
+<script>
+// ===== 1. PENGATURAN (coba ubah angka-angka ini untuk latihan) =====
+const GRID = 20;        // jumlah kotak per sisi
+const KECEPATAN = 130;  // milidetik per langkah (makin kecil = makin cepat)
+
+// ===== 2. SIAPKAN CANVAS =====
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const skorEl = document.getElementById('skor');
+
+// Ukuran canvas menyesuaikan lebar layar HP (porting layar!)
+const sisi = Math.min(window.innerWidth - 24, 400);
+const kotak = Math.floor(sisi / GRID);   // ukuran satu kotak dalam piksel
+canvas.width = canvas.height = kotak * GRID;
+
+// ===== 3. DATA GAME =====
+let ular, arah, arahBerikut, makanan, skor, terbaik = 0, jalan = false, timer;
+
+try { terbaik = Number(localStorage.getItem('snakeBest')) || 0; } catch (e) {}
+
+function mulai() {
+  ular = [{x: 10, y: 10}, {x: 9, y: 10}, {x: 8, y: 10}];  // kepala di index 0
+  arah = {x: 1, y: 0};
+  arahBerikut = arah;
+  skor = 0;
+  jalan = true;
+  taruhMakanan();
+  clearInterval(timer);
+  timer = setInterval(langkah, KECEPATAN);
+  gambar();
+}
+
+function taruhMakanan() {
+  do {
+    makanan = {x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID)};
+  } while (ular.some(s => s.x === makanan.x && s.y === makanan.y)); // jangan di badan ular
+}
+
+// ===== 4. LOGIKA: satu langkah game =====
+function langkah() {
+  arah = arahBerikut;
+  const kepala = {x: ular[0].x + arah.x, y: ular[0].y + arah.y};
+
+  // Nabrak tembok atau badan sendiri = kalah
+  const nabrakTembok = kepala.x < 0 || kepala.y < 0 || kepala.x >= GRID || kepala.y >= GRID;
+  const nabrakBadan = ular.some(s => s.x === kepala.x && s.y === kepala.y);
+  if (nabrakTembok || nabrakBadan) return selesai();
+
+  ular.unshift(kepala);                       // tambah kepala baru di depan
+  if (kepala.x === makanan.x && kepala.y === makanan.y) {
+    skor++;                                   // makan: ekor tidak dibuang, ular memanjang
+    taruhMakanan();
+  } else {
+    ular.pop();                               // tidak makan: buang ekor
+  }
+  gambar();
+}
+
+function selesai() {
+  jalan = false;
+  clearInterval(timer);
+  if (skor > terbaik) {
+    terbaik = skor;
+    try { localStorage.setItem('snakeBest', terbaik); } catch (e) {}
+  }
+  gambar();
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 10);
+  ctx.font = '16px sans-serif';
+  ctx.fillText('Ketuk layar untuk main lagi', canvas.width / 2, canvas.height / 2 + 20);
+}
+
+// ===== 5. GAMBAR =====
+function gambar() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#e53935';                  // makanan
+  ctx.fillRect(makanan.x * kotak + 2, makanan.y * kotak + 2, kotak - 4, kotak - 4);
+  ular.forEach((s, i) => {
+    ctx.fillStyle = i === 0 ? '#81c784' : '#4caf50';   // kepala lebih terang
+    ctx.fillRect(s.x * kotak + 1, s.y * kotak + 1, kotak - 2, kotak - 2);
+  });
+  skorEl.textContent = 'Skor: ' + skor + ' | Terbaik: ' + terbaik;
+}
+
+// ===== 6. KONTROL =====
+function ubahArah(x, y) {
+  if (x === -arah.x && y === -arah.y) return;  // dilarang langsung balik arah
+  arahBerikut = {x, y};
+}
+
+// 6a. Keyboard (untuk tes di laptop)
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp') ubahArah(0, -1);
+  if (e.key === 'ArrowDown') ubahArah(0, 1);
+  if (e.key === 'ArrowLeft') ubahArah(-1, 0);
+  if (e.key === 'ArrowRight') ubahArah(1, 0);
+  if (!jalan && e.key === ' ') mulai();
+});
+
+// 6b. Tombol virtual di layar
+document.querySelectorAll('#pad button').forEach(b => {
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    ubahArah(Number(b.dataset.x), Number(b.dataset.y));
+  });
+});
+
+// 6c. Gesek layar (swipe) -- inti porting kontrol ke sentuhan
+let awalX, awalY;
+document.addEventListener('touchstart', e => {
+  awalX = e.touches[0].clientX;
+  awalY = e.touches[0].clientY;
+}, {passive: true});
+
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - awalX;
+  const dy = e.changedTouches[0].clientY - awalY;
+
+  if (Math.abs(dx) < 20 && Math.abs(dy) < 20) {   // cuma ketukan, bukan gesekan
+    if (!jalan && e.target === canvas) mulai();
+    return;
+  }
+  if (Math.abs(dx) > Math.abs(dy)) {
+    ubahArah(dx > 0 ? 1 : -1, 0);                  // gesek horizontal
+  } else {
+    ubahArah(0, dy > 0 ? 1 : -1);                  // gesek vertikal
+  }
+}, {passive: true});
+
+// Mulai game saat halaman dibuka
+mulai();
+</script>
+</body>
+</html>
